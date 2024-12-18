@@ -15,6 +15,9 @@ import random
 import pyautogui
 
 class FacebookCommentClicker:
+
+    os.environ['DISPLAY'] = ':0'
+    
     def __init__(self, urls, scroll_count=100, click_delay=2):
         self.setup_logging()
         self.urls = urls
