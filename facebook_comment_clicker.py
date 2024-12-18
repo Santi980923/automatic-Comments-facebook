@@ -1,11 +1,12 @@
-import os
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+import os
 import time
 import getpass
 import logging
@@ -41,11 +42,12 @@ class FacebookCommentClicker:
 
     def setup_driver(self):
         try:
-            # Ruta específica al `chromedriver.exe` descargado
-            driver_path = "D:\Descargas\chromedriver-win64\chromedriver-win64\chromedriver.exe"  # Reemplaza con la ruta exacta de `chromedriver.exe` descargado
             
-            service = Service(driver_path)
+            service = Service(ChromeDriverManager().install())
             options = webdriver.ChromeOptions()
+            
+            # Configuración de datos de usuario para evitar inicios de sesión manuales
+            user_data_dir = f"C:\\Users\\{self.user}\\AppData\\Local\\Google\\Chrome\\User Data"
             user_data_dir = f"C:\\Users\\{self.user}\\AppData\\Local\\Google\\Chrome\\User Data"
             options.add_argument(f"--user-data-dir={user_data_dir}")
             options.add_argument("--profile-directory=Default")
@@ -55,7 +57,6 @@ class FacebookCommentClicker:
         except Exception as e:
             self.logger.error(f"Error al configurar el driver: {e}")
             raise
-        
     def click_main_page(self, driver):
         """Realiza un clic en la página principal para activar el scrolling"""
         try:
@@ -328,4 +329,3 @@ if __name__ == "__main__":
     
     clicker = FacebookCommentClicker(urls=urls, scroll_count=5, click_delay=2)
     clicker.run()
-
