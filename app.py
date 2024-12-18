@@ -46,8 +46,8 @@ def run_script():
     global current_thread
 
     # Validar que el usuario esté autenticado
-    if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'No autenticado'}), 401
+    #if 'username' not in session:
+    #    return jsonify({'status': 'error', 'message': 'No autenticado'}), 401
 
     # Obtener parámetros del formulario
     urls = request.form.get('urls', '').split(',')
