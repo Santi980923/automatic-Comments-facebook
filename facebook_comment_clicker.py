@@ -1,8 +1,5 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
@@ -15,14 +12,15 @@ from datetime import datetime
 import random
 
 class FacebookCommentClicker:
-    def __init__(self, urls, scroll_count=100, click_delay=2):
+    def __init__(self, urls, scroll_count=100, click_delay=2, max_comments=8):
         self.setup_logging()
         self.urls = urls
         self.max_scroll_count = scroll_count
         self.click_delay = click_delay
+        self.max_comments = max_comments  # Número máximo de comentarios
         self.user = getpass.getuser()
-        self.comment_boxes = set()
         self.comentarios_respuestas = []
+        self.processed_elements = set()  # Conjunto para elementos procesados
 
     def setup_logging(self):
         log_directory = "facebook_logs"
@@ -58,94 +56,77 @@ class FacebookCommentClicker:
             self.logger.error(f"Error al configurar el driver: {e}")
             raise
 
-    def click_main_page(self, driver):
+    def click_comment_box(self, driver, element):
         try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            body = driver.find_element(By.TAG_NAME, 'body')
-            actions = ActionChains(driver)
-            actions.move_to_element_with_offset(body, 100, 100)
-            actions.click()
-            actions.perform()
-            time.sleep(1)
-            self.logger.info("Clic realizado en la página principal")
-            return True
-        except Exception as e:
-            self.logger.error(f"Error al hacer clic en la página principal: {e}")
-            return False
+            # Verificar si el elemento ya fue procesado
+            if element in self.processed_elements:
+                return False
 
-    def click_comment_box(self, driver, element, current_scroll_count):
-        try:
+            # Marcar el elemento como procesado
+            self.processed_elements.add(element)
+
+            # Realizar acciones de clic y comentario
             actions = ActionChains(driver)
             driver.execute_script(
                 "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", 
                 element
             )
-            time.sleep(1.5)
+            time.sleep(1)
 
-            driver.execute_script("""
-                arguments[0].style.border = '3px solid green';
-                arguments[0].style.backgroundColor = 'lightgreen';
-            """, element)
-
+            # Hacer clic y agregar estilo visual
             actions.move_to_element(element)
             actions.click()
             actions.perform()
-            time.sleep(random.uniform(1, 2))
+            time.sleep(1)
 
-            tipo_comentario = "Positivo" if current_scroll_count < self.max_scroll_count * 0.5 else "Neutro"
+            tipo_comentario = "Positivo"  # Puedes personalizar este comportamiento
             respuesta = responder_comentario(tipo_comentario)
-            comentario = element.get_attribute("aria-label") or "Comentario sin texto"
-
-            self.comentarios_respuestas.append({
-                "Comentario": comentario,
-                "Respuesta": respuesta,
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
 
             element.send_keys(respuesta)
             time.sleep(0.5)
             element.send_keys(Keys.RETURN)
 
+            self.comentarios_respuestas.append({
+                "Respuesta": respuesta,
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
             self.logger.info(f"Comentario realizado: {respuesta}")
             return True
         except Exception as e:
-            self.logger.error(f"Error al hacer clic en el elemento: {e}")
-            return False
-
-    def perform_scroll(self, driver):
-        try:
-            scroll_height = random.randint(300, 500)
-            driver.execute_script(f"window.scrollBy({{top: {scroll_height}, left: 0, behavior: 'smooth'}});")
-            time.sleep(random.uniform(1.5, 2.5))
-            return True
-        except Exception as e:
-            self.logger.error(f"Error durante el scroll: {e}")
+            self.logger.error(f"Error al comentar: {e}")
             return False
 
     def scan_and_click_page(self, driver):
         try:
             current_scroll_count = 0
-            if not self.click_main_page(driver):
-                self.logger.error("No se pudo hacer clic inicial en la página principal")
-                return
-            time.sleep(3)
+            comments_made = 0
 
-            while current_scroll_count < self.max_scroll_count:
-                comment_boxes_found = False
+            while current_scroll_count < self.max_scroll_count and comments_made < self.max_comments:
+                # Buscar cuadros de comentarios
                 elements = driver.find_elements(By.CSS_SELECTOR, "div[contenteditable='true'][role='textbox']")
                 for element in elements:
-                    if self.click_comment_box(driver, element, current_scroll_count):
-                        comment_boxes_found = True
+                    if comments_made >= self.max_comments:
                         break
 
-                if not comment_boxes_found:
-                    self.perform_scroll(driver)
+                    # Intentar hacer clic en el cuadro de comentario
+                    if self.click_comment_box(driver, element):
+                        comments_made += 1
 
+                # Realizar scroll para cargar más publicaciones
+                if comments_made < self.max_comments:
+                    self.perform_scroll(driver)
                 current_scroll_count += 1
+
+            self.logger.info(f"Se realizaron {comments_made} comentarios.")
         except Exception as e:
             self.logger.error(f"Error durante el escaneo: {e}")
+
+    def perform_scroll(self, driver):
+        try:
+            driver.execute_script("window.scrollBy(0, 500);")
+            time.sleep(2)
+        except Exception as e:
+            self.logger.error(f"Error durante el scroll: {e}")
 
     def run(self):
         driver = None
@@ -166,13 +147,52 @@ class FacebookCommentClicker:
 
 def responder_comentario(tipo):
     respuestas = {
-        "Positivo": ["¡Gracias por tu buen comentario!", "¡Nos alegra que te haya gustado!"],
-        "Neutro": ["Gracias por tu opinión.", "Valoramos tus comentarios."]
-    }
+    "Positivo": [
+        "¡Gracias por tu buen comentario!",
+        "¡Nos alegra que te haya gustado!",
+        "Es genial saber que estamos cumpliendo tus expectativas.",
+        "¡Apreciamos mucho tu entusiasmo!",
+        "Gracias por tu apoyo, nos motiva a seguir trabajando con dedicación.",
+        "Es un placer recibir comentarios tan positivos como el tuyo.",
+        "¡Nos encanta que lo hayas disfrutado!",
+        "Tu reconocimiento nos inspira a seguir mejorando.",
+        "¡Gracias por destacar nuestro esfuerzo!",
+        "Nos llena de satisfacción saber que estás contento con nuestra labor."
+    ],
+    "Negativo": [
+        "Lamentamos que no te haya gustado.",
+        "Gracias por tu crítica, trabajaremos para mejorar.",
+        "Tomaremos en cuenta tus observaciones para seguir creciendo.",
+        "Sentimos no haberte dado una mejor experiencia.",
+        "Agradecemos que nos compartas tus comentarios para aprender y mejorar.",
+        "Lamentamos que no hayamos cumplido tus expectativas, trabajaremos en ello.",
+        "Tu opinión es importante para nosotros, haremos ajustes necesarios.",
+        "Gracias por señalar esto, lo revisaremos a fondo.",
+        "Lamentamos que esta vez no hayamos estado a la altura.",
+        "Estamos comprometidos a mejorar y agradecemos tu honestidad."
+    ],
+    "Neutro": [
+        "Gracias por tu opinión.",
+        "Valoramos tus comentarios.",
+        "Agradecemos que compartas tu punto de vista.",
+        "Tomaremos nota de lo que nos dices.",
+        "Tu opinión nos ayuda a reflexionar y avanzar.",
+        "Gracias por darnos tu perspectiva.",
+        "Es importante para nosotros conocer lo que piensas.",
+        "Tus comentarios nos permiten evaluar lo que estamos haciendo.",
+        "Gracias por tomarte el tiempo de compartir tu experiencia.",
+        "Valoramos todas las opiniones, gracias por la tuya."
+    ]
+        }
     return random.choice(respuestas.get(tipo, ["Gracias por tu comentario."]))
 
-
 if __name__ == "__main__":
-    urls = ["https://web.facebook.com/profeMikhailKrasnov"]
-    clicker = FacebookCommentClicker(urls=urls, scroll_count=5, click_delay=2)
+    # Lista de URLs de páginas de Facebook
+    urls = [
+        "https://www.facebook.com/profeMikhailKrasnov",
+        "https://www.facebook.com/AlcaldiaTunja"
+    ]
+    # Inicialización del script con las URLs y configuraciones
+    clicker = FacebookCommentClicker(urls=urls, scroll_count=10, click_delay=2, max_comments=8)
     clicker.run()
+
